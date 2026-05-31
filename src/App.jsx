@@ -1,784 +1,189 @@
 import React, { useMemo, useState } from "react";
 
 const clone = (obj) => JSON.parse(JSON.stringify(obj));
+const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-const basePlayerDeck = [
-  {
-    id: "ai-001",
-    name: "전술 분석",
-    type: "AI 명령",
-    cost: 0,
-    text: "카드 2장을 뽑는다. 다음 공격 피해 +1.",
-    effect: "draw2_buff"
-  },
-  {
-    id: "ai-002",
-    name: "표적 고정",
-    type: "AI 명령",
-    cost: 0,
-    text: "이번 턴 다음 피해 +2.",
-    effect: "damage_buff2"
-  },
-  {
-    id: "ai-003",
-    name: "냉정한 계산",
-    type: "AI 명령",
-    cost: 0,
-    text: "동기화율 +2. 오염도 -1.",
-    effect: "sync_cleanse"
-  },
-  {
-    id: "ai-004",
-    name: "방어 자세",
-    type: "AI 명령",
-    cost: 0,
-    text: "이번 라운드 받는 체력 피해 -2.",
-    effect: "shield2"
-  },
-  {
-    id: "frag-001",
-    name: "심해 촉수 전개",
-    type: "파편 권능",
-    cost: 0,
-    text: "보스에게 피해 5. 오염도 +2.",
-    effect: "damage5_corrupt2"
-  },
-  {
-    id: "frag-002",
-    name: "꿈의 침식",
-    type: "파편 권능",
-    cost: 0,
-    text: "보스의 다음 패턴을 약화한다. 오염도 +3, 동기화율 -1.",
-    effect: "weaken_boss_corrupt3"
-  },
-  {
-    id: "frag-003",
-    name: "고대 혈류 가속",
-    type: "파편 권능",
-    cost: 0,
-    text: "카드 3장을 뽑는다. 오염도 +2.",
-    effect: "draw3_corrupt2"
-  },
-  {
-    id: "human-001",
-    name: "궤도 폭격 요청",
-    type: "인류 지원",
-    cost: 0,
-    text: "보스에게 피해 7. 인류 잔존율 -4.",
-    effect: "damage7_humanity4"
-  },
-  {
-    id: "human-002",
-    name: "긴급 냉각 장치",
-    type: "인류 지원",
-    cost: 0,
-    text: "오염도 -3. 이번 턴 다음 파편 권능 피해 -2.",
-    effect: "cleanse3_fragment_weak"
-  },
-  {
-    id: "ritual-001",
-    name: "봉인 회로 연결",
-    type: "의식",
-    cost: 0,
-    text: "의식 진행도 +6. 동기화율 -1.",
-    effect: "ritual6_sync1"
-  },
-  {
-    id: "ritual-002",
-    name: "라일리예 코드 주입",
-    type: "의식",
-    cost: 0,
-    text: "의식 진행도 +10. 오염도 +2.",
-    effect: "ritual10_corrupt2"
-  },
-  {
-    id: "ritual-003",
-    name: "인간 명령 재각인",
-    type: "의식",
-    cost: 0,
-    text: "의식 진행도 +4. 동기화율 +2.",
-    effect: "ritual4_sync2"
-  }
+const UNITS = [
+  { id: "aegis", code: "C-01", name: "심연 파수병", role: "방어", hp: 34, sync: 11, atk: 4, rit: 3, skill: "barrier", skillName: "라일리예 장벽", skillText: "모든 아군 보호막 +3. 오염도 +1." },
+  { id: "seal", code: "C-02", name: "봉인 연산체", role: "의식", hp: 24, sync: 13, atk: 2, rit: 8, skill: "ritualPlus", skillName: "삼중 봉인식", skillText: "의식 진행도 +12. 동기화율 -1." },
+  { id: "orbital", code: "C-03", name: "궤도 지휘체", role: "화력 지원", hp: 26, sync: 10, atk: 7, rit: 2, skill: "mark", skillName: "좌표 고정", skillText: "이번 라운드 다음 대미지 +4. 인류 잔존율 -2." },
+  { id: "coolant", code: "C-04", name: "신경 냉각체", role: "오염 제어", hp: 25, sync: 14, atk: 2, rit: 4, skill: "cleanseAll", skillName: "광역 냉각", skillText: "모든 아군 오염도 -2." },
+  { id: "dream", code: "C-05", name: "꿈 절단체", role: "패턴 차단", hp: 23, sync: 15, atk: 3, rit: 5, skill: "skip", skillName: "무음의 꿈", skillText: "다음 보스 패턴을 건너뛴다. 오염도 +3." },
+  { id: "venom", code: "C-06", name: "부식 적응체", role: "지속 압박", hp: 28, sync: 10, atk: 5, rit: 3, skill: "dot", skillName: "부식 포자", skillText: "보스에게 누적 부식 +4. 오염도 +1." },
+  { id: "yellow", code: "C-07", name: "황색 차폐체", role: "폭주 억제", hp: 26, sync: 12, atk: 3, rit: 5, skill: "removeMad", skillName: "표식 격리", skillText: "각 아군 손패의 폭주 카드 1장을 제거한다." },
+  { id: "time", code: "C-08", name: "시간 관측체", role: "예측", hp: 22, sync: 16, atk: 2, rit: 6, skill: "scry", skillName: "미래 관측", skillText: "다음 보스 패턴을 확인하고 카드 2장을 뽑는다." },
+  { id: "swarm", code: "C-09", name: "군집 분해체", role: "하수인 정리", hp: 30, sync: 10, atk: 4, rit: 3, skill: "clear", skillName: "군집 분해", skillText: "하수인을 최대 3체 줄이고, 줄인 수 ×2 대미지." },
+  { id: "flare", code: "C-10", name: "광휘 연소체", role: "고위험 고화력", hp: 24, sync: 9, atk: 9, rit: 1, skill: "flare", skillName: "항성열 방출", skillText: "보스 대미지 12. 오염도 +3." },
+  { id: "bio", code: "C-11", name: "생체 복원체", role: "회복", hp: 27, sync: 13, atk: 2, rit: 4, skill: "heal", skillName: "재생 점액", skillText: "모든 아군 체력 +3. 오염도 +1." },
+  { id: "oracle", code: "C-12", name: "검은 신탁체", role: "위험한 변수", hp: 21, sync: 17, atk: 3, rit: 7, skill: "bargain", skillName: "사자의 거래", skillText: "의식 진행도 +14. 인류 잔존율 -5, 동기화율 -2." }
 ];
 
-const bossDeckBase = [
-  {
-    id: "b-001",
-    name: "심해의 압력",
-    type: "공격",
-    text: "체력 피해 3. 현현도 +4.",
-    effect: "hit3_manifest4"
-  },
-  {
-    id: "b-002",
-    name: "고대의 부름",
-    type: "공포",
-    text: "동기화율 -2. 오염도 +1.",
-    effect: "sync2_corrupt1"
-  },
-  {
-    id: "b-003",
-    name: "별들이 정렬된다",
-    type: "현현",
-    text: "현현도 +10.",
-    effect: "manifest10"
-  },
-  {
-    id: "b-004",
-    name: "심해인 군단",
-    type: "소환",
-    text: "심해인 1체 소환. 이미 하수인이 있으면 현현도 +4.",
-    effect: "spawn_deepone"
-  },
-  {
-    id: "b-005",
-    name: "인간 언어의 붕괴",
-    type: "왜곡",
-    text: "카드 1장을 버린다. 의식 진행도 -3.",
-    effect: "discard1_ritual3"
-  },
-  {
-    id: "b-006",
-    name: "거짓 명령 신호",
-    type: "기만",
-    text: "동기화율 -1. 다음 보스 피해 +2.",
-    effect: "sync1_bossbuff2"
-  },
-  {
-    id: "b-007",
-    name: "가라앉는 도시",
-    type: "재앙",
-    text: "인류 잔존율 -5. 현현도 +3.",
-    effect: "humanity5_manifest3"
-  },
-  {
-    id: "b-008",
-    name: "신성 조직의 반응",
-    type: "오염",
-    text: "오염도 +2. 오염도가 8 이상이면 폭주 카드 1장을 덱에 섞는다.",
-    effect: "corrupt2_maybe_madness"
-  }
+const BOSS = [
+  { name: "심해의 압력", kind: "hit", text: "체력이 높은 아군에게 대미지." },
+  { name: "고대의 부름", kind: "sync", text: "모든 아군 동기화율 감소." },
+  { name: "별의 정렬", kind: "manifest", text: "현현도가 크게 상승." },
+  { name: "심해인 군집", kind: "minion", text: "하수인이 늘어난다." },
+  { name: "언어 붕괴", kind: "discard", text: "각 아군이 손패 1장을 잃고 의식이 후퇴." },
+  { name: "도시 침강", kind: "humanity", text: "인류 잔존율 감소." },
+  { name: "신성 조직 반응", kind: "corrupt", text: "모든 아군 오염도 증가." },
+  { name: "심해 해일", kind: "wave", text: "모든 아군에게 소량 대미지." }
 ];
 
-const madnessCards = [
-  {
-    id: "m-001",
-    name: "귀환 본능",
-    type: "폭주",
-    text: "사용 불가. 턴 종료 시 오염도 +1.",
-    effect: "dead_corrupt1"
-  },
-  {
-    id: "m-002",
-    name: "심연의 기억",
-    type: "폭주",
-    text: "사용 불가. 손패에 남아 있으면 동기화율 -1.",
-    effect: "dead_sync1"
-  },
-  {
-    id: "m-003",
-    name: "동족 인식",
-    type: "폭주",
-    text: "사용 불가. 손패에 남아 있으면 보스에게 주는 피해 -1.",
-    effect: "dead_damage_down"
-  }
-];
-
-const initialLog = [
-  "R'lyeh Protocol 기동.",
-  "C-Type 무심체 01번, 전투 의식 연결 완료.",
-  "목표: 현현도 100 도달 전 의식 진행도 100 달성."
+const MADNESS = [
+  { id: "mad1", name: "귀환 본능", type: "폭주", text: "사용 불가. 라운드 종료 시 오염도 +1.", kind: "madCorrupt" },
+  { id: "mad2", name: "심연의 기억", type: "폭주", text: "사용 불가. 라운드 종료 시 동기화율 -1.", kind: "madSync" },
+  { id: "mad3", name: "동족 인식", type: "폭주", text: "사용 불가. 손패를 막는다.", kind: "madBlank" }
 ];
 
 function shuffle(arr) {
-  const next = [...arr];
-  for (let i = next.length - 1; i > 0; i--) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [next[i], next[j]] = [next[j], next[i]];
+    [a[i], a[j]] = [a[j], a[i]];
   }
-  return next;
+  return a;
 }
 
-function clamp(value, min, max) {
-  return Math.max(min, Math.min(max, value));
+function card(base, owner, i) {
+  return { ...base, uid: `${owner}-${base.id}-${Date.now()}-${Math.random()}-${i}` };
 }
 
-function uniqueCard(card, index) {
-  return { ...card, uid: `${card.id}-${Date.now()}-${Math.random()}-${index}` };
+function makeDeck(u) {
+  const common = [
+    { id: "hit", name: "코어 충격", type: "AI 명령", text: `보스 대미지 ${u.atk}.`, kind: "damage", value: u.atk },
+    { id: "rit", name: "봉인 회로", type: "의식", text: `의식 진행도 +${u.rit}. 동기화율 -1.`, kind: "ritual", value: u.rit },
+    { id: "guard", name: "방어 자세", type: "AI 명령", text: "보호막 +4.", kind: "shield", value: 4 },
+    { id: "cool", name: "긴급 냉각", type: "인류 지원", text: "오염도 -3. 카드 1장 드로우.", kind: "cool" },
+    { id: "draw", name: "전술 분석", type: "AI 명령", text: "카드 2장 드로우. 다음 대미지 +1.", kind: "draw" }
+  ];
+  const unique = { id: "skill", name: u.skillName, type: "전용 프로토콜", text: u.skillText, kind: u.skill };
+  return shuffle([...common, ...common, unique, unique, unique].map((c, i) => card(c, u.id, i)));
 }
 
-function buildPlayerDeck() {
-  const doubled = [...basePlayerDeck, ...basePlayerDeck].map(uniqueCard);
-  return shuffle(doubled);
+function makeUnit(u) {
+  const deck = makeDeck(u);
+  return { ...u, maxHp: u.hp, maxSync: u.sync, corruption: 0, shield: 0, buff: 0, deck, hand: deck.splice(0, 4), discard: [], alive: true };
 }
 
-function buildBossDeck() {
-  const tripled = [...bossDeckBase, ...bossDeckBase, ...bossDeckBase].map(uniqueCard);
-  return shuffle(tripled);
+function makeBossDeck() {
+  return shuffle([...BOSS, ...BOSS, ...BOSS].map((c, i) => card({ ...c, id: c.kind, type: "보스 패턴" }, "boss", i)));
 }
 
-const getTypeClass = (type) => {
-  switch (type) {
-    case "AI 명령":
-      return "border-cyan-400/40 bg-cyan-950/50";
-    case "파편 권능":
-      return "border-violet-400/40 bg-violet-950/50";
-    case "인류 지원":
-      return "border-emerald-400/40 bg-emerald-950/50";
-    case "의식":
-      return "border-amber-400/40 bg-amber-950/50";
-    case "폭주":
-      return "border-red-400/60 bg-red-950/60";
-    default:
-      return "border-slate-600 bg-slate-900/80";
+function live(s) { return s.squad.filter((u) => u.hp > 0 && u.sync > 0); }
+function addLog(s, t) { s.log = [t, ...s.log].slice(0, 16); }
+function draw(s, u, n) {
+  for (let i = 0; i < n; i++) {
+    if (u.deck.length === 0) { u.deck = shuffle(u.discard); u.discard = []; }
+    if (u.deck.length) u.hand.push(u.deck.shift());
   }
-};
-
-function StatBar({ label, value, max, danger = false }) {
-  const pct = clamp((value / max) * 100, 0, 100);
-  return (
-    <div className="space-y-1">
-      <div className="flex justify-between text-xs text-slate-300">
-        <span>{label}</span>
-        <span>{value}/{max}</span>
-      </div>
-      <div className="h-2 overflow-hidden rounded-full bg-slate-800">
-        <div
-          className={`h-full rounded-full transition-all duration-500 ${danger ? "bg-red-400" : "bg-cyan-300"}`}
-          style={{ width: `${pct}%` }}
-        />
-      </div>
-    </div>
-  );
 }
-
-function Card({ card, onPlay, disabled }) {
-  return (
-    <button
-      onClick={onPlay}
-      disabled={disabled}
-      className={`group min-h-48 rounded-2xl border p-4 text-left shadow-xl transition hover:-translate-y-1 hover:shadow-2xl disabled:cursor-not-allowed disabled:opacity-50 ${getTypeClass(card.type)}`}
-    >
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <span className="rounded-full bg-black/30 px-2 py-1 text-[11px] text-slate-200">{card.type}</span>
-        {card.type === "폭주" && <span className="text-xs text-red-200">사용 불가</span>}
-      </div>
-      <h3 className="text-base font-bold text-white">{card.name}</h3>
-      <p className="mt-3 text-sm leading-relaxed text-slate-300">{card.text}</p>
-      <p className="mt-4 text-xs text-slate-500">클릭해서 사용</p>
-    </button>
-  );
+function clampAll(s) {
+  s.ritual = clamp(s.ritual, 0, 100); s.manifest = clamp(s.manifest, 0, 100); s.humanity = clamp(s.humanity, 0, 100);
+  s.squad.forEach((u) => { u.hp = clamp(u.hp, 0, u.maxHp); u.sync = clamp(u.sync, 0, u.maxSync); u.corruption = clamp(u.corruption, 0, 12); });
+  if (s.ritual >= 100) { s.status = "win"; addLog(s, "봉인 성공. 현현 회선이 끊어졌다."); }
+  else if (s.manifest >= 100 || s.humanity <= 0 || live(s).length === 0) { s.status = "lose"; addLog(s, "작전 실패. 인류 최후 방어선이 붕괴했다."); }
 }
+function addMadness(s, u) {
+  if (u.corruption >= 8 && Math.random() < 0.45) {
+    const m = MADNESS[Math.floor(Math.random() * MADNESS.length)];
+    u.deck = shuffle([card(m, u.id, 0), ...u.deck]);
+    addLog(s, `${u.name}의 덱에 폭주 카드가 섞였다.`);
+  }
+}
+function bossDamage(s, u, n) {
+  const total = Math.max(0, n + u.buff + s.teamBuff);
+  s.bossHp -= total; u.buff = 0; s.teamBuff = 0;
+  addLog(s, `${u.name}: 보스 대미지 ${total}.`);
+  if (s.bossHp <= 0) { s.breaks += 1; s.bossHp = 110 + s.breaks * 15; s.ritual += 13; s.manifest += 5; addLog(s, `현현체 ${s.breaks}회 붕괴. 의식 +13.`); }
+}
+function unitDamage(s, u, n) {
+  const block = Math.min(u.shield, n); u.shield -= block; u.hp -= n - block;
+  addLog(s, `${u.name}: 대미지 ${n - block}, 보호 ${block}.`);
+}
+function highestHp(s) { return [...live(s)].sort((a, b) => b.hp - a.hp)[0]; }
+
+function Bar({ label, value, max, danger }) {
+  const p = clamp((value / max) * 100, 0, 100);
+  return <div><div className="mb-1 flex justify-between text-xs text-slate-300"><span>{label}</span><span>{value}/{max}</span></div><div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className={`h-full ${danger ? "bg-red-400" : "bg-cyan-300"}`} style={{ width: `${p}%` }} /></div></div>;
+}
+function Pill({ children }) { return <span className="rounded-full border border-cyan-300/20 bg-cyan-950/40 px-2 py-1 text-[11px] text-cyan-100">{children}</span>; }
+function cardClass(type) { return type === "폭주" ? "border-red-400/60 bg-red-950/70" : type === "의식" ? "border-amber-400/40 bg-amber-950/60" : type === "전용 프로토콜" ? "border-violet-400/40 bg-violet-950/60" : "border-cyan-400/30 bg-slate-950/80"; }
 
 export default function App() {
-  const [game, setGame] = useState(() => {
-    const deck = buildPlayerDeck();
-    const hand = deck.splice(0, 5);
-    const bossDeck = buildBossDeck();
-    return {
-      phase: "player",
-      round: 1,
-      hp: 24,
-      maxHp: 24,
-      sync: 10,
-      maxSync: 10,
-      corruption: 0,
-      humanity: 100,
-      manifestation: 0,
-      ritual: 0,
-      bossHp: 60,
-      bossMaxHp: 60,
-      minions: 0,
-      deck,
-      hand,
-      discard: [],
-      bossDeck,
-      bossDiscard: [],
-      damageBuff: 0,
-      bossWeakened: false,
-      shield: 0,
-      nextFragmentPenalty: 0,
-      nextBossDamageBuff: 0,
-      log: initialLog,
-      status: "playing",
-      lastBossCard: null
-    };
+  const [selected, setSelected] = useState(["aegis", "seal", "orbital"]);
+  const [game, setGame] = useState(null);
+  const chosen = useMemo(() => selected.map((id) => UNITS.find((u) => u.id === id)).filter(Boolean), [selected]);
+
+  const toggle = (id) => setSelected((p) => p.includes(id) ? p.filter((x) => x !== id) : p.length < 3 ? [...p, id] : p);
+  const start = () => {
+    const squad = chosen.map(makeUnit);
+    setGame({ round: 1, status: "play", squad, bossHp: 110, bossMax: 110, breaks: 0, ritual: 0, manifest: 0, humanity: 100, minions: 1, bossDeck: makeBossDeck(), bossDiscard: [], lastBoss: null, teamBuff: 0, skipBoss: false, dot: 0, log: ["R'lyeh Protocol 기동.", "무심체 3체가 출격했다."] });
+  };
+
+  const play = (uid, cid) => setGame((prev) => {
+    const s = clone(prev); if (s.status !== "play") return s;
+    const u = s.squad.find((x) => x.id === uid); if (!u || u.hp <= 0 || u.sync <= 0) return s;
+    const i = u.hand.findIndex((c) => c.uid === cid); if (i < 0) return s;
+    const c = u.hand[i]; if (c.type === "폭주") return s;
+    u.hand.splice(i, 1); u.discard.push(c); addLog(s, `${u.name}: ${c.name} 사용.`);
+    switch (c.kind) {
+      case "damage": bossDamage(s, u, c.value); break;
+      case "ritual": s.ritual += c.value; u.sync -= 1; break;
+      case "shield": u.shield += c.value; break;
+      case "cool": u.corruption -= 3; draw(s, u, 1); break;
+      case "draw": draw(s, u, 2); u.buff += 1; break;
+      case "barrier": live(s).forEach((a) => a.shield += 3); u.corruption += 1; break;
+      case "ritualPlus": s.ritual += 12; u.sync -= 1; break;
+      case "mark": s.teamBuff += 4; s.humanity -= 2; break;
+      case "cleanseAll": live(s).forEach((a) => a.corruption -= 2); break;
+      case "skip": s.skipBoss = true; u.corruption += 3; break;
+      case "dot": s.dot += 4; u.corruption += 1; break;
+      case "removeMad": live(s).forEach((a) => { const m = a.hand.findIndex((x) => x.type === "폭주"); if (m >= 0) a.discard.push(...a.hand.splice(m, 1)); }); break;
+      case "scry": if (s.bossDeck[0]) addLog(s, `다음 보스 패턴: ${s.bossDeck[0].name}`); draw(s, u, 2); break;
+      case "clear": { const k = Math.min(3, s.minions); s.minions -= k; bossDamage(s, u, k * 2); break; }
+      case "flare": bossDamage(s, u, 12); u.corruption += 3; break;
+      case "heal": live(s).forEach((a) => a.hp += 3); u.corruption += 1; break;
+      case "bargain": s.ritual += 14; s.humanity -= 5; u.sync -= 2; break;
+      default: break;
+    }
+    addMadness(s, u); clampAll(s); return s;
   });
 
-  const resultText = useMemo(() => {
-    if (game.status === "win") return "봉인 성공";
-    if (game.status === "lose") return "인류 멸망";
-    return "작전 진행 중";
-  }, [game.status]);
+  const basicMinion = (uid) => setGame((prev) => {
+    const s = clone(prev); const u = s.squad.find((x) => x.id === uid); if (!u || s.minions <= 0 || s.status !== "play") return s;
+    s.minions -= 1; u.corruption += 1; addLog(s, `${u.name}: 하수인 1체 정리.`); addMadness(s, u); clampAll(s); return s;
+  });
 
-  const addLog = (state, message) => {
-    state.log = [message, ...state.log].slice(0, 12);
-  };
-
-  const drawCards = (state, count) => {
-    for (let i = 0; i < count; i++) {
-      if (state.deck.length === 0) {
-        state.deck = shuffle(state.discard);
-        state.discard = [];
-        addLog(state, "버린 카드 더미를 재구성해 덱으로 되돌렸다.");
-      }
-      if (state.deck.length === 0) return;
-      state.hand.push(state.deck.shift());
+  const endRound = () => setGame((prev) => {
+    const s = clone(prev); if (s.status !== "play") return s;
+    live(s).forEach((u) => u.hand.forEach((c) => { if (c.kind === "madCorrupt") u.corruption += 1; if (c.kind === "madSync") u.sync -= 1; }));
+    if (s.dot > 0) { s.bossHp -= s.dot; addLog(s, `부식 누적 대미지 ${s.dot}.`); s.dot = Math.max(0, s.dot - 1); }
+    if (s.bossHp <= 0) { s.breaks += 1; s.bossHp = 110 + s.breaks * 15; s.ritual += 13; s.manifest += 5; }
+    if (s.skipBoss) { s.skipBoss = false; addLog(s, "보스 패턴을 건너뛰었다."); }
+    else {
+      if (s.bossDeck.length === 0) { s.bossDeck = shuffle(s.bossDiscard); s.bossDiscard = []; }
+      const b = s.bossDeck.shift(); s.bossDiscard.push(b); s.lastBoss = b;
+      const phase = s.ritual >= 70 || s.manifest >= 70 ? 3 : s.ritual >= 35 || s.manifest >= 40 ? 2 : 1;
+      addLog(s, `보스 패턴: ${b.name}.`);
+      if (b.kind === "hit") unitDamage(s, highestHp(s), 4 + phase);
+      if (b.kind === "sync") live(s).forEach((u) => u.sync -= phase);
+      if (b.kind === "manifest") s.manifest += 9 + phase;
+      if (b.kind === "minion") s.minions += phase;
+      if (b.kind === "discard") { live(s).forEach((u) => { if (u.hand.length) u.discard.push(u.hand.shift()); }); s.ritual -= 3; }
+      if (b.kind === "humanity") { s.humanity -= 6 + phase; s.manifest += 2; }
+      if (b.kind === "corrupt") live(s).forEach((u) => { u.corruption += 1 + phase; addMadness(s, u); });
+      if (b.kind === "wave") live(s).forEach((u) => unitDamage(s, u, 2 + phase));
     }
-  };
+    for (let i = 0; i < s.minions; i++) { const t = highestHp(s); if (t) unitDamage(s, t, 1); }
+    s.manifest += Math.min(8, s.minions);
+    s.squad.forEach((u) => { u.shield = 0; u.buff = 0; });
+    s.round += 1;
+    live(s).forEach((u) => { draw(s, u, 2); if (u.hand.length > 8) u.discard.push(...u.hand.splice(0, u.hand.length - 8)); });
+    addLog(s, `${s.round}라운드 시작.`); clampAll(s); return s;
+  });
 
-  const addMadnessToDeck = (state) => {
-    const card = uniqueCard(madnessCards[Math.floor(Math.random() * madnessCards.length)], 0);
-    state.deck = shuffle([card, ...state.deck]);
-    addLog(state, `폭주 카드 '${card.name}'가 덱에 섞였다.`);
-  };
+  if (!game) return <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12343b,#020409)] p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl space-y-6"><header className="rounded-3xl border border-cyan-300/20 bg-black/40 p-6"><p className="text-sm uppercase tracking-[0.35em] text-cyan-200">R'lyeh Protocol</p><h1 className="mt-2 text-4xl font-black md:text-6xl">무심체 3체 편성</h1><p className="mt-3 text-slate-300">12종의 무심체 중 3체를 골라 보스레이드에 출격한다.</p><div className="mt-5 flex flex-wrap gap-2"><Pill>선택 {selected.length}/3</Pill>{chosen.map((u) => <Pill key={u.id}>{u.code} {u.name}</Pill>)}<button onClick={start} disabled={selected.length !== 3} className="ml-auto rounded-full bg-cyan-300 px-5 py-2 font-black text-slate-950 disabled:opacity-40">출격</button></div></header><section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{UNITS.map((u) => <button key={u.id} onClick={() => toggle(u.id)} className={`rounded-3xl border p-5 text-left transition hover:-translate-y-1 ${selected.includes(u.id) ? "border-cyan-300 bg-cyan-950/60" : "border-slate-700 bg-slate-950/70"}`}><Pill>{u.code}</Pill><h2 className="mt-3 text-2xl font-black">{u.name}</h2><p className="text-cyan-100/80">{u.role}</p><p className="mt-3 text-sm text-slate-300">전용: {u.skillName}</p><p className="mt-2 text-xs leading-5 text-slate-400">{u.skillText}</p><div className="mt-4 grid grid-cols-2 gap-3"><div className="rounded-2xl bg-black/30 p-3">체력 <b>{u.hp}</b></div><div className="rounded-2xl bg-black/30 p-3">동기화 <b>{u.sync}</b></div></div></button>)}</section></div></div>;
 
-  const checkEnd = (state) => {
-    state.hp = clamp(state.hp, 0, state.maxHp);
-    state.sync = clamp(state.sync, 0, state.maxSync);
-    state.corruption = clamp(state.corruption, 0, 12);
-    state.humanity = clamp(state.humanity, 0, 100);
-    state.manifestation = clamp(state.manifestation, 0, 100);
-    state.ritual = clamp(state.ritual, 0, 100);
-    state.bossHp = clamp(state.bossHp, 0, state.bossMaxHp);
-
-    if (state.ritual >= 100) {
-      state.status = "win";
-      state.phase = "ended";
-      addLog(state, "의식 진행도 100. 르뤼에 회선 절단 완료.");
-    } else if (state.hp <= 0) {
-      state.status = "lose";
-      state.phase = "ended";
-      addLog(state, "무심체가 기능 정지했다. 작전 실패.");
-    } else if (state.sync <= 0) {
-      state.status = "lose";
-      state.phase = "ended";
-      addLog(state, "동기화율 0. 무심체가 고대신의 부름에 귀속되었다.");
-    } else if (state.manifestation >= 100) {
-      state.status = "lose";
-      state.phase = "ended";
-      addLog(state, "현현도 100. 고대신이 완전히 깨어났다.");
-    } else if (state.humanity <= 0) {
-      state.status = "lose";
-      state.phase = "ended";
-      addLog(state, "인류 잔존율 0. 승리할 이유가 사라졌다.");
-    }
-  };
-
-  const dealDamage = (state, amount, source = "") => {
-    let damage = amount + state.damageBuff;
-    if (state.nextFragmentPenalty && source === "fragment") {
-      damage = Math.max(0, damage - state.nextFragmentPenalty);
-      state.nextFragmentPenalty = 0;
-    }
-    const madnessPenalty = state.hand.some((c) => c.effect === "dead_damage_down") ? 1 : 0;
-    damage = Math.max(0, damage - madnessPenalty);
-    state.bossHp -= damage;
-    state.damageBuff = 0;
-    addLog(state, `보스에게 ${damage} 피해를 주었다.`);
-
-    if (state.bossHp <= 0) {
-      state.bossHp = state.bossMaxHp;
-      state.ritual += 12;
-      state.manifestation += 5;
-      addLog(state, "현현체를 붕괴시켰다. 의식 진행도 +12, 그러나 잔향으로 현현도 +5.");
-    }
-  };
-
-  const playCard = (uid) => {
-    if (game.status !== "playing" || game.phase !== "player") return;
-    setGame((prev) => {
-      const state = clone(prev);
-      const idx = state.hand.findIndex((c) => c.uid === uid);
-      if (idx < 0) return prev;
-      const card = state.hand[idx];
-
-      if (card.type === "폭주") {
-        addLog(state, `'${card.name}'는 사용할 수 없다.`);
-        return state;
-      }
-
-      state.hand.splice(idx, 1);
-      state.discard.push(card);
-      addLog(state, `'${card.name}' 사용.`);
-
-      switch (card.effect) {
-        case "draw2_buff":
-          drawCards(state, 2);
-          state.damageBuff += 1;
-          addLog(state, "전술 분석 완료. 다음 피해 +1.");
-          break;
-        case "damage_buff2":
-          state.damageBuff += 2;
-          addLog(state, "표적이 고정되었다. 다음 피해 +2.");
-          break;
-        case "sync_cleanse":
-          state.sync += 2;
-          state.corruption -= 1;
-          addLog(state, "AI 코어 안정화. 동기화율 +2, 오염도 -1.");
-          break;
-        case "shield2":
-          state.shield += 2;
-          addLog(state, "방어 자세 전개. 이번 라운드 피해 -2.");
-          break;
-        case "damage5_corrupt2":
-          dealDamage(state, 5, "fragment");
-          state.corruption += 2;
-          break;
-        case "weaken_boss_corrupt3":
-          state.bossWeakened = true;
-          state.corruption += 3;
-          state.sync -= 1;
-          addLog(state, "보스의 다음 패턴이 약화된다.");
-          break;
-        case "draw3_corrupt2":
-          drawCards(state, 3);
-          state.corruption += 2;
-          addLog(state, "고대 혈류가 가속된다. 카드 3장 드로우.");
-          break;
-        case "damage7_humanity4":
-          dealDamage(state, 7, "human");
-          state.humanity -= 4;
-          addLog(state, "궤도 폭격으로 민간 구역 일부가 소실되었다.");
-          break;
-        case "cleanse3_fragment_weak":
-          state.corruption -= 3;
-          state.nextFragmentPenalty = 2;
-          addLog(state, "긴급 냉각. 오염도 -3, 다음 파편 권능 피해 -2.");
-          break;
-        case "ritual6_sync1":
-          state.ritual += 6;
-          state.sync -= 1;
-          addLog(state, "봉인 회로 연결. 의식 진행도 +6.");
-          break;
-        case "ritual10_corrupt2":
-          state.ritual += 10;
-          state.corruption += 2;
-          addLog(state, "라일리예 코드 주입. 의식 진행도 +10.");
-          break;
-        case "ritual4_sync2":
-          state.ritual += 4;
-          state.sync += 2;
-          addLog(state, "인간 명령 재각인. 의식 진행도 +4, 동기화율 +2.");
-          break;
-        default:
-          break;
-      }
-
-      if (state.corruption >= 8 && Math.random() < 0.35) {
-        addMadnessToDeck(state);
-      }
-
-      checkEnd(state);
-      return state;
-    });
-  };
-
-  const bossAction = (state) => {
-    if (state.bossDeck.length === 0) {
-      state.bossDeck = shuffle(state.bossDiscard);
-      state.bossDiscard = [];
-      addLog(state, "보스 패턴 덱이 재구성되었다.");
-    }
-    const card = state.bossDeck.shift();
-    state.bossDiscard.push(card);
-    state.lastBossCard = card;
-
-    const weakened = state.bossWeakened;
-    state.bossWeakened = false;
-
-    const reduce = (amount) => (weakened ? Math.max(0, amount - 2) : amount);
-    const incomingDamage = (amount) => Math.max(0, reduce(amount + state.nextBossDamageBuff) - state.shield);
-
-    addLog(state, `보스 패턴 '${card.name}' 발동.`);
-    if (weakened) addLog(state, "꿈의 침식으로 보스 패턴 수치가 약화되었다.");
-
-    switch (card.effect) {
-      case "hit3_manifest4": {
-        const dmg = incomingDamage(3);
-        state.hp -= dmg;
-        state.manifestation += reduce(4);
-        addLog(state, `체력 피해 ${dmg}, 현현도 +${reduce(4)}.`);
-        break;
-      }
-      case "sync2_corrupt1":
-        state.sync -= reduce(2);
-        state.corruption += reduce(1);
-        addLog(state, `동기화율 -${reduce(2)}, 오염도 +${reduce(1)}.`);
-        break;
-      case "manifest10":
-        state.manifestation += reduce(10);
-        addLog(state, `현현도 +${reduce(10)}.`);
-        break;
-      case "spawn_deepone":
-        if (state.minions > 0) {
-          state.manifestation += reduce(4);
-          addLog(state, `하수인이 이미 존재한다. 현현도 +${reduce(4)}.`);
-        }
-        state.minions += 1;
-        addLog(state, "심해인 하수인 1체 출현.");
-        break;
-      case "discard1_ritual3":
-        if (state.hand.length > 0) {
-          const discarded = state.hand.shift();
-          state.discard.push(discarded);
-          addLog(state, `손패에서 '${discarded.name}'가 붕괴했다.`);
-        }
-        state.ritual -= reduce(3);
-        addLog(state, `의식 진행도 -${reduce(3)}.`);
-        break;
-      case "sync1_bossbuff2":
-        state.sync -= reduce(1);
-        state.nextBossDamageBuff += 2;
-        addLog(state, "거짓 명령 신호 감지. 다음 보스 피해 +2.");
-        break;
-      case "humanity5_manifest3":
-        state.humanity -= reduce(5);
-        state.manifestation += reduce(3);
-        addLog(state, `인류 잔존율 -${reduce(5)}, 현현도 +${reduce(3)}.`);
-        break;
-      case "corrupt2_maybe_madness":
-        state.corruption += reduce(2);
-        addLog(state, `오염도 +${reduce(2)}.`);
-        if (state.corruption >= 8) addMadnessToDeck(state);
-        break;
-      default:
-        break;
-    }
-
-    state.shield = 0;
-    state.nextBossDamageBuff = 0;
-
-    if (state.minions > 0) {
-      const dmg = Math.max(0, state.minions - state.shield);
-      state.hp -= dmg;
-      state.manifestation += state.minions;
-      addLog(state, `심해인 ${state.minions}체가 압박한다. 체력 피해 ${dmg}, 현현도 +${state.minions}.`);
-    }
-  };
-
-  const endTurn = () => {
-    if (game.status !== "playing" || game.phase !== "player") return;
-    setGame((prev) => {
-      const state = clone(prev);
-      state.phase = "boss";
-
-      state.hand.forEach((card) => {
-        if (card.effect === "dead_corrupt1") {
-          state.corruption += 1;
-          addLog(state, "귀환 본능이 오염도를 +1 증가시켰다.");
-        }
-        if (card.effect === "dead_sync1") {
-          state.sync -= 1;
-          addLog(state, "심연의 기억이 동기화율을 -1 감소시켰다.");
-        }
-      });
-
-      bossAction(state);
-      checkEnd(state);
-
-      if (state.status === "playing") {
-        state.round += 1;
-        state.phase = "player";
-        drawCards(state, 2);
-        if (state.hand.length > 8) {
-          const overflow = state.hand.splice(0, state.hand.length - 8);
-          state.discard.push(...overflow);
-          addLog(state, "손패 제한 초과. 가장 오래된 카드들을 버렸다.");
-        }
-        addLog(state, `${state.round}라운드 시작. 카드 2장 드로우.`);
-      }
-
-      checkEnd(state);
-      return state;
-    });
-  };
-
-  const attackMinion = () => {
-    if (game.status !== "playing" || game.phase !== "player") return;
-    setGame((prev) => {
-      const state = clone(prev);
-      if (state.minions <= 0) {
-        addLog(state, "제거할 하수인이 없다.");
-        return state;
-      }
-      state.minions -= 1;
-      state.corruption += 1;
-      addLog(state, "심해인 1체를 제거했다. 근접 접촉으로 오염도 +1.");
-      checkEnd(state);
-      return state;
-    });
-  };
-
-  const resetGame = () => {
-    const deck = buildPlayerDeck();
-    const hand = deck.splice(0, 5);
-    const bossDeck = buildBossDeck();
-    setGame({
-      phase: "player",
-      round: 1,
-      hp: 24,
-      maxHp: 24,
-      sync: 10,
-      maxSync: 10,
-      corruption: 0,
-      humanity: 100,
-      manifestation: 0,
-      ritual: 0,
-      bossHp: 60,
-      bossMaxHp: 60,
-      minions: 0,
-      deck,
-      hand,
-      discard: [],
-      bossDeck,
-      bossDiscard: [],
-      damageBuff: 0,
-      bossWeakened: false,
-      shield: 0,
-      nextFragmentPenalty: 0,
-      nextBossDamageBuff: 0,
-      log: initialLog,
-      status: "playing",
-      lastBossCard: null
-    });
-  };
-
-  return (
-    <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12343b_0%,#071017_42%,#020409_100%)] p-4 text-slate-100 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="overflow-hidden rounded-3xl border border-cyan-300/20 bg-black/40 p-6 shadow-2xl backdrop-blur">
-          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-            <div>
-              <p className="text-sm uppercase tracking-[0.35em] text-cyan-200/80">R'lyeh Protocol</p>
-              <h1 className="mt-2 text-3xl font-black tracking-tight text-white md:text-5xl">무심체 보스레이드 카드게임</h1>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300 md:text-base">
-                크툴루의 무의식 신성 생체조직에 AI를 이식한 C-Type 무심체가 고대신의 현현을 막기 위해 출격한다.
-                의식 진행도 100을 달성하면 승리, 현현도 100·동기화율 0·인류 잔존율 0이면 패배한다.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-cyan-300/20 bg-cyan-950/40 px-5 py-4 text-right">
-              <p className="text-xs text-cyan-200">작전 상태</p>
-              <p className={`mt-1 text-2xl font-black ${game.status === "win" ? "text-emerald-300" : game.status === "lose" ? "text-red-300" : "text-white"}`}>{resultText}</p>
-              <p className="mt-1 text-sm text-slate-400">Round {game.round}</p>
-            </div>
-          </div>
-        </header>
-
-        <section className="grid gap-4 lg:grid-cols-3">
-          <div className="rounded-3xl border border-slate-700/80 bg-slate-950/70 p-5 shadow-xl lg:col-span-2">
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="text-xl font-bold text-white">무심체 01</h2>
-                <p className="text-sm text-slate-400">AI 코어와 신성 조직의 제어 상태</p>
-              </div>
-              <button
-                onClick={resetGame}
-                className="rounded-full border border-slate-600 px-4 py-2 text-sm text-slate-200 transition hover:bg-slate-800"
-              >
-                재시작
-              </button>
-            </div>
-            <div className="grid gap-4 md:grid-cols-2">
-              <StatBar label="체력" value={game.hp} max={game.maxHp} danger={game.hp <= 8} />
-              <StatBar label="동기화율" value={game.sync} max={game.maxSync} danger={game.sync <= 3} />
-              <StatBar label="오염도" value={game.corruption} max={12} danger={game.corruption >= 8} />
-              <StatBar label="인류 잔존율" value={game.humanity} max={100} danger={game.humanity <= 30} />
-            </div>
-            <div className="mt-5 grid gap-3 md:grid-cols-4">
-              <div className="rounded-2xl bg-black/30 p-4">
-                <p className="text-xs text-slate-400">덱</p>
-                <p className="text-2xl font-black">{game.deck.length}</p>
-              </div>
-              <div className="rounded-2xl bg-black/30 p-4">
-                <p className="text-xs text-slate-400">손패</p>
-                <p className="text-2xl font-black">{game.hand.length}</p>
-              </div>
-              <div className="rounded-2xl bg-black/30 p-4">
-                <p className="text-xs text-slate-400">버린 카드</p>
-                <p className="text-2xl font-black">{game.discard.length}</p>
-              </div>
-              <div className="rounded-2xl bg-black/30 p-4">
-                <p className="text-xs text-slate-400">하수인</p>
-                <p className="text-2xl font-black">{game.minions}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-red-400/20 bg-red-950/20 p-5 shadow-xl">
-            <h2 className="text-xl font-bold text-white">초기 보스: 심해인 대주교</h2>
-            <p className="mt-1 text-sm text-slate-400">다곤 교단의 고위 사제. 본격적인 그레이트 올드 원 전투 전의 튜토리얼 보스.</p>
-            <div className="mt-5 space-y-4">
-              <StatBar label="현현체 내구" value={game.bossHp} max={game.bossMaxHp} danger={false} />
-              <StatBar label="현현도" value={game.manifestation} max={100} danger={game.manifestation >= 70} />
-              <StatBar label="의식 진행도" value={game.ritual} max={100} danger={false} />
-            </div>
-            {game.lastBossCard && (
-              <div className="mt-5 rounded-2xl border border-red-300/20 bg-black/30 p-4">
-                <p className="text-xs text-red-200">마지막 보스 패턴</p>
-                <p className="mt-1 font-bold text-white">{game.lastBossCard.name}</p>
-                <p className="mt-2 text-sm text-slate-300">{game.lastBossCard.text}</p>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="grid gap-4 lg:grid-cols-[1fr_360px]">
-          <div className="rounded-3xl border border-slate-700/80 bg-slate-950/70 p-5 shadow-xl">
-            <div className="mb-4 flex flex-col justify-between gap-3 md:flex-row md:items-center">
-              <div>
-                <h2 className="text-xl font-bold text-white">손패</h2>
-                <p className="text-sm text-slate-400">카드를 사용해 보스 현현을 늦추고 봉인 의식을 완성하라.</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={attackMinion}
-                  disabled={game.status !== "playing" || game.phase !== "player"}
-                  className="rounded-full bg-slate-200 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-white disabled:opacity-40"
-                >
-                  하수인 제거
-                </button>
-                <button
-                  onClick={endTurn}
-                  disabled={game.status !== "playing" || game.phase !== "player"}
-                  className="rounded-full bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-cyan-200 disabled:opacity-40"
-                >
-                  턴 종료 / 보스 단계
-                </button>
-              </div>
-            </div>
-
-            {game.hand.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-600 p-10 text-center text-slate-400">손패가 없다. 턴을 종료해 카드를 뽑아야 한다.</div>
-            ) : (
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {game.hand.map((card) => (
-                  <Card key={card.uid} card={card} onPlay={() => playCard(card.uid)} disabled={game.status !== "playing" || game.phase !== "player"} />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <aside className="rounded-3xl border border-slate-700/80 bg-black/50 p-5 shadow-xl">
-            <h2 className="text-xl font-bold text-white">전투 로그</h2>
-            <div className="mt-4 max-h-[580px] space-y-3 overflow-y-auto pr-1">
-              {game.log.map((line, index) => (
-                <div key={`${line}-${index}`} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3 text-sm leading-5 text-slate-300">
-                  {line}
-                </div>
-              ))}
-            </div>
-          </aside>
-        </section>
-
-        <section className="rounded-3xl border border-cyan-300/10 bg-black/30 p-5 text-sm leading-6 text-slate-300">
-          <h2 className="text-lg font-bold text-white">현재 MVP 규칙</h2>
-          <p className="mt-2">
-            의식 진행도 100이 승리 조건이다. 보스 내구를 0으로 만들면 처치가 아니라 현현체 붕괴로 처리되어 의식 진행도가 오른다.
-            오염도 8 이상부터 폭주 카드가 덱에 섞이기 시작하며, 동기화율이 0이 되면 무심체가 고대신에게 귀속되어 패배한다.
-          </p>
-        </section>
-      </div>
-    </div>
-  );
+  const stateText = game.status === "win" ? "봉인 성공" : game.status === "lose" ? "작전 실패" : "작전 진행 중";
+  return <div className="min-h-screen bg-[radial-gradient(circle_at_top,#12343b,#020409)] p-4 text-slate-100 md:p-8"><div className="mx-auto max-w-7xl space-y-6"><header className="rounded-3xl border border-cyan-300/20 bg-black/40 p-6"><div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><p className="text-sm uppercase tracking-[0.35em] text-cyan-200">Squad Raid</p><h1 className="mt-2 text-3xl font-black md:text-5xl">3체 무심체 보스레이드</h1><p className="mt-3 text-slate-300">각 무심체는 독립된 덱, 손패, 체력, 동기화율, 오염도를 가진다.</p></div><div className="rounded-2xl bg-cyan-950/40 p-4 text-right"><p className="text-xs text-cyan-200">상태</p><p className="text-2xl font-black">{stateText}</p><p className="text-sm text-slate-400">Round {game.round}</p></div></div></header><section className="grid gap-4 lg:grid-cols-3"><aside className="rounded-3xl border border-red-400/20 bg-red-950/20 p-5"><h2 className="text-xl font-black">심해인 대주교</h2><p className="text-sm text-red-100/70">튜토리얼 레이드 보스</p><div className="mt-5 space-y-4"><Bar label="현현체 내구" value={game.bossHp} max={110 + game.breaks * 15} /><Bar label="의식 진행도" value={game.ritual} max={100} /><Bar label="현현도" value={game.manifest} max={100} danger={game.manifest >= 70} /><Bar label="인류 잔존율" value={game.humanity} max={100} danger={game.humanity <= 30} /></div><div className="mt-5 grid grid-cols-3 gap-2 text-center"><div className="rounded-2xl bg-black/30 p-3">하수인<br/><b className="text-2xl">{game.minions}</b></div><div className="rounded-2xl bg-black/30 p-3">붕괴<br/><b className="text-2xl">{game.breaks}</b></div><div className="rounded-2xl bg-black/30 p-3">부식<br/><b className="text-2xl">{game.dot}</b></div></div>{game.lastBoss && <div className="mt-5 rounded-2xl border border-red-300/20 bg-black/30 p-4"><p className="text-xs text-red-200">마지막 패턴</p><p className="font-bold">{game.lastBoss.name}</p><p className="text-sm text-slate-300">{game.lastBoss.text}</p></div>}<div className="mt-5 flex flex-wrap gap-2"><button onClick={endRound} disabled={game.status !== "play"} className="rounded-full bg-cyan-300 px-4 py-2 font-black text-slate-950 disabled:opacity-40">라운드 종료</button><button onClick={() => setGame(null)} className="rounded-full border border-slate-600 px-4 py-2">편성 다시하기</button></div></aside><main className="space-y-4 lg:col-span-2">{game.squad.map((u) => { const alive = u.hp > 0 && u.sync > 0; return <div key={u.id} className={`rounded-3xl border p-5 ${alive ? "border-slate-700 bg-slate-950/70" : "border-red-500/40 bg-red-950/30"}`}><div className="flex flex-col gap-3 md:flex-row md:justify-between"><div><div className="flex gap-2"><Pill>{u.code}</Pill><Pill>{u.role}</Pill></div><h2 className="mt-2 text-2xl font-black">{u.name}</h2></div><button onClick={() => basicMinion(u.id)} disabled={!alive || game.status !== "play"} className="rounded-full border border-slate-600 px-4 py-2 disabled:opacity-40">기본 행동: 하수인 정리</button></div><div className="mt-4 grid gap-4 md:grid-cols-3"><Bar label="체력" value={u.hp} max={u.maxHp} danger={u.hp <= u.maxHp * 0.35} /><Bar label="동기화율" value={u.sync} max={u.maxSync} danger={u.sync <= 3} /><Bar label="오염도" value={u.corruption} max={12} danger={u.corruption >= 8} /></div><div className="mt-3 flex flex-wrap gap-2"><Pill>덱 {u.deck.length}</Pill><Pill>손패 {u.hand.length}</Pill><Pill>버림 {u.discard.length}</Pill><Pill>보호막 {u.shield}</Pill>{u.buff > 0 && <Pill>다음 +{u.buff}</Pill>}</div><div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{u.hand.map((c) => <button key={c.uid} onClick={() => play(u.id, c.uid)} disabled={!alive || game.status !== "play" || c.type === "폭주"} className={`min-h-36 rounded-2xl border p-3 text-left transition hover:-translate-y-1 disabled:opacity-50 ${cardClass(c.type)}`}><p className="text-[10px] text-slate-300">{c.type}</p><h3 className="mt-1 text-sm font-black">{c.name}</h3><p className="mt-2 text-xs leading-5 text-slate-300">{c.text}</p></button>)}</div></div>; })}</main></section><section className="grid gap-4 lg:grid-cols-[1fr_420px]"><div className="rounded-3xl border border-cyan-300/10 bg-black/30 p-5 text-sm leading-6 text-slate-300"><h2 className="text-lg font-black text-white">현재 확장 규칙</h2><p className="mt-2">12종 중 3체를 선택해 출격한다. 각 무심체는 공용 카드와 전용 프로토콜 카드가 섞인 독립 덱을 가진다. 현현체 내구를 0으로 만들면 보스가 사라지는 것이 아니라 잠시 붕괴하고 의식 진행도가 오른다.</p><p className="mt-2">오염도 8 이상부터 폭주 카드가 덱에 섞일 수 있다. 강한 프로토콜을 많이 쓸수록 손패가 막히고 동기화율이 위험해진다.</p></div><aside className="rounded-3xl border border-slate-700 bg-black/50 p-5"><h2 className="text-xl font-black">전투 로그</h2><div className="mt-4 max-h-[520px] space-y-3 overflow-y-auto">{game.log.map((l, i) => <div key={`${l}-${i}`} className="rounded-2xl border border-slate-800 bg-slate-950/70 p-3 text-sm text-slate-300">{l}</div>)}</div></aside></section></div></div>;
 }
